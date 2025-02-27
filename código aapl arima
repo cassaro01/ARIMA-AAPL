@@ -1,0 +1,51 @@
+!pip install yfinance
+pip install pmdarima
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import yfinance as yf
+from statsmodels.tsa.arima.model import ARIMA
+from pmdarima.arima import auto_arima
+
+# Baixar dados históricos da Apple (AAPL)
+ticker = "AAPL"
+df = yf.download(ticker, start="2020-01-01", end="2024-01-01")
+
+# Consideramos apenas o fechamento (close)
+df = df[['Close']]  # Substituímos 'Adj Close' por 'Close'
+
+# Definir frequência explícita e preencher valores ausentes
+df = df.asfreq('B')  # Frequência de dias úteis
+df['Close'].fillna(method='ffill', inplace=True)  # Preenchimento forward fill
+
+# Visualizar os dados
+df.plot(figsize=(10, 5), title=f'Histórico de Preços - {ticker}')
+plt.show()
+
+# Aplicando auto_arima para encontrar os melhores parâmetros
+auto_model = auto_arima(df['Close'], seasonal=False, trace=True, suppress_warnings=True)
+
+# Obtendo os melhores parâmetros
+p, d, q = auto_model.order
+print(f"Melhores parâmetros: p={p}, d={d}, q={q}")
+
+# Garantir que temos dados suficientes para modelagem
+if len(df) > max(p, d, q):
+    # Treinando o modelo ARIMA com os parâmetros encontrados
+    model = ARIMA(df['Close'], order=(p, d, q))
+    model_fit = model.fit()
+
+    # Gerando previsões para os próximos 30 dias
+    forecast = model_fit.forecast(steps=30)
+    future_dates = pd.date_range(start=df.index[-1], periods=31, freq='B')[1:]
+    forecast_series = pd.Series(forecast, index=future_dates)
+
+    # Plotando previsão
+    plt.figure(figsize=(10, 5))
+    plt.plot(df['Close'], label='Histórico')
+    plt.plot(forecast_series, label='Previsão', linestyle='dashed')
+    plt.legend()
+    plt.title(f'Previsão de Preços - {ticker}')
+    plt.show()
+else:
+    print("Série temporal muito curta para modelagem ARIMA.")
